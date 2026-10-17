@@ -381,7 +381,7 @@ byte-compatible with existing 6800 and 6809 NETDRV/FNETDRV clients.
 >   count, creation date, `endTrack`/`endSector`;
 > - directory chain on track 0 from sector 5 to `t0_spt`;
 > - free chain linking every sector on tracks 1…`endTrack`;
-> - all multi-byte fields big-endian (structs per `doc/flexdsk.md`).
+> - all multi-byte fields big-endian (structs per `docs/flexdsk.md`).
 
 > **REQ-064** — Creation shall reject tracks < 2 or > 256, sectors < 5 or
 > > 255, and volume numbers > 65535.
@@ -1211,7 +1211,7 @@ a `socat`-created pty pair, plus an in-tree mock RFC-2217 terminal server
 
 - `t/flexnet-protocol.md`: FlexNet/NetPC wire protocol and defect list (normative).
 - `t/fnetsrv-protocol.md`: second analysis of the same protocol (Wurtz `flexnet.c`).
-- `doc/flexdsk.md`: FLEX SIR and directory structures.
+- `docs/flexdsk.md`: FLEX SIR and directory structures.
 - `t/fds-sds-protocol.md`: FDC+ serial disk protocol (background only).
 - RFC 854, 856, 858, 2217. Motorola S-Record format (M68000PRM Appendix C).
 
