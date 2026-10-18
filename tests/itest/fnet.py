@@ -246,10 +246,11 @@ class Daemon:
         with open(self.conf, "w") as f:
             f.write("\n".join(lines) + "\n")
 
-    def start(self, wait_ports=True):
+    def start(self, wait_ports=True, foreground=True, env=None, level="trace"):
         self.logf = open(self.log, "ab")
-        self.proc = subprocess.Popen([FNETD, "-f", "-c", self.conf, "-l", "trace"],
-                                     stdout=self.logf, stderr=self.logf)
+        args = [FNETD, "-c", self.conf] + (["-f"] if foreground else []) + (["-l", level] if level else [])
+        self.proc = subprocess.Popen(args, stdout=self.logf, stderr=self.logf,
+                                     env=dict(os.environ, **(env or {})))
         end = time.monotonic() + 5
         while not os.path.exists(self.ctl):
             if self.proc.poll() is not None:

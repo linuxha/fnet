@@ -319,8 +319,9 @@ static int drop_privileges(const char *user, const char *rundir)
 
 static void usage(FILE *f)
 {
-    fprintf(f, "usage: fnetd [-f] [-c config] [-l level] [-V]\n"
+    fprintf(f, "usage: fnetd [-f] [-t] [-c config] [-l level] [-V]\n"
                "  -f         run in the foreground, log to stderr\n"
+               "  -t         check the configuration and exit\n"
                "  -c config  configuration file (default /etc/fnetd/fnetd.conf)\n"
                "  -l level   log level override (error|warn|notice|info|debug|trace)\n"
                "  -V         print version\n");
@@ -330,11 +331,13 @@ int main(int argc, char **argv)
 {
     char err[512], rundir[CFG_PATH_MAX];
     sigset_t mask;
+    bool check_only = false;
     int c, lockfd;
 
-    while ((c = getopt(argc, argv, "fc:l:Vh")) != -1) {
+    while ((c = getopt(argc, argv, "ftc:l:Vh")) != -1) {
         switch (c) {
         case 'f': g_foreground = true; break;
+        case 't': check_only = true; break;
         case 'c': str_copy(g_cfg_path, optarg, sizeof g_cfg_path); break;
         case 'l':
             g_level_override = log_level_parse(optarg);
@@ -352,6 +355,11 @@ int main(int argc, char **argv)
     if (config_load(g_cfg_path, &g_cfg, err, sizeof err) < 0) {
         fprintf(stderr, "fnetd: %s\n", err);          /* REQ-003 */
         return 1;
+    }
+    if (check_only) {
+        printf("fnetd: %s: OK (%u port(s))\n", g_cfg_path, g_cfg.nports);
+        config_free(&g_cfg);
+        return 0;
     }
     g_start_us = now_us();
     if (g_foreground)

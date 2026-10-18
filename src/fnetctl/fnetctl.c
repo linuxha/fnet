@@ -158,15 +158,18 @@ static int strip_flags(int argc, char **argv, bool *ro, long *wait_ms)
     return o;
 }
 
+static struct jb g_req;
+
 static int bad(void)
 {
+    jb_free(&g_req);
     usage(stderr);
     return EXIT_USAGE;
 }
 
 int main(int argc, char **argv)
 {
-    struct jb j;
+    struct jb *jp = &g_req;
     const char *env = getenv("FNETCTL_SOCKET");
     char **av;
     int ac, i = 1, rc;
@@ -197,87 +200,87 @@ int main(int argc, char **argv)
     av = argv + i;
     ac = argc - i;
 
-    jb_init(&j);
-    jb_obj(&j);
+    jb_init(jp);
+    jb_obj(jp);
 
     if (ac == 1 && (!strcmp(av[0], "status") || !strcmp(av[0], "version") || !strcmp(av[0], "reload") ||
                     !strcmp(av[0], "ports") || !strcmp(av[0], "sessions"))) {
-        jb_kstr(&j, "cmd", av[0]);
+        jb_kstr(jp, "cmd", av[0]);
     } else if (!strcmp(av[0], "port") && ac >= 3) {
         const char *sub = av[1];
         if (!strcmp(sub, "add") || !strcmp(sub, "set")) {
             if (!all_kv(ac - 3, av + 3) || (!strcmp(sub, "set") && ac < 4))
                 return bad();
-            jb_kstr(&j, "cmd", !strcmp(sub, "add") ? "port_add" : "port_set");
-            jb_kstr(&j, "port", av[2]);
-            kv_join(&j, "kv", ac - 3, av + 3);
+            jb_kstr(jp, "cmd", !strcmp(sub, "add") ? "port_add" : "port_set");
+            jb_kstr(jp, "port", av[2]);
+            kv_join(jp, "kv", ac - 3, av + 3);
             if (!strcmp(sub, "add"))
                 fprintf(stderr, "fnetctl: note: runtime changes are not written to the config file\n");
         } else if (ac == 3 && (!strcmp(sub, "remove") || !strcmp(sub, "enable") ||
                                !strcmp(sub, "disable") || !strcmp(sub, "restart"))) {
             char cmd[32];
             snprintf(cmd, sizeof cmd, "port_%s", sub);
-            jb_kstr(&j, "cmd", cmd);
-            jb_kstr(&j, "port", av[2]);
+            jb_kstr(jp, "cmd", cmd);
+            jb_kstr(jp, "port", av[2]);
         } else {
             return bad();
         }
     } else if (!strcmp(av[0], "drives") && ac == 2) {
-        jb_kstr(&j, "cmd", "drives");
-        jb_kstr(&j, "port", av[1]);
+        jb_kstr(jp, "cmd", "drives");
+        jb_kstr(jp, "port", av[1]);
     } else if (!strcmp(av[0], "mount")) {
         unsigned long drv;
         ac = strip_flags(ac, av, &ro, &wait_ms);
         if (ac != 4 || parse_ulong(av[2], 3, &drv) < 0)
             return bad();
-        jb_kstr(&j, "cmd", "mount");
-        jb_kstr(&j, "port", av[1]);
-        jb_ku64(&j, "drv", drv);
-        jb_kstr(&j, "path", av[3]);
-        jb_kbool(&j, "ro", ro);
+        jb_kstr(jp, "cmd", "mount");
+        jb_kstr(jp, "port", av[1]);
+        jb_ku64(jp, "drv", drv);
+        jb_kstr(jp, "path", av[3]);
+        jb_kbool(jp, "ro", ro);
     } else if (!strcmp(av[0], "umount")) {
         unsigned long drv;
         ac = strip_flags(ac, av, NULL, &wait_ms);
         if (ac != 3)
             return bad();
-        jb_kstr(&j, "cmd", "umount");
-        jb_kstr(&j, "port", av[1]);
+        jb_kstr(jp, "cmd", "umount");
+        jb_kstr(jp, "port", av[1]);
         if (!strcmp(av[2], "all"))
-            jb_kstr(&j, "drv", "all");
+            jb_kstr(jp, "drv", "all");
         else if (parse_ulong(av[2], 3, &drv) == 0)
-            jb_ku64(&j, "drv", drv);
+            jb_ku64(jp, "drv", drv);
         else
             return bad();
     } else if (!strcmp(av[0], "tape") && ac >= 3) {
         if (!strcmp(av[1], "set")) {
-            jb_kstr(&j, "cmd", "tape_set");
-            jb_kstr(&j, "port", av[2]);
+            jb_kstr(jp, "cmd", "tape_set");
+            jb_kstr(jp, "port", av[2]);
             for (int k = 3; k < ac; k++) {
                 if (!strncmp(av[k], "load=", 5))
-                    jb_kstr(&j, "load", av[k] + 5);
+                    jb_kstr(jp, "load", av[k] + 5);
                 else if (!strncmp(av[k], "punch=", 6))
-                    jb_kstr(&j, "punch", av[k] + 6);
+                    jb_kstr(jp, "punch", av[k] + 6);
                 else
                     return bad();
             }
         } else if (ac == 3 && (!strcmp(av[1], "show") || !strcmp(av[1], "rewind") || !strcmp(av[1], "cancel"))) {
             char cmd[32];
             snprintf(cmd, sizeof cmd, "tape_%s", av[1]);
-            jb_kstr(&j, "cmd", cmd);
-            jb_kstr(&j, "port", av[2]);
+            jb_kstr(jp, "cmd", cmd);
+            jb_kstr(jp, "port", av[2]);
         } else {
             return bad();
         }
     } else if (!strcmp(av[0], "log") && ac >= 2) {
         if (!strcmp(av[1], "reopen") && ac == 2) {
-            jb_kstr(&j, "cmd", "log_reopen");
+            jb_kstr(jp, "cmd", "log_reopen");
         } else if (!strcmp(av[1], "level")) {
-            jb_kstr(&j, "cmd", "log_level");
+            jb_kstr(jp, "cmd", "log_level");
             if (ac == 5 && !strcmp(av[2], "--port")) {
-                jb_kstr(&j, "port", av[3]);
-                jb_kstr(&j, "level", av[4]);
+                jb_kstr(jp, "port", av[3]);
+                jb_kstr(jp, "level", av[4]);
             } else if (ac == 3) {
-                jb_kstr(&j, "level", av[2]);
+                jb_kstr(jp, "level", av[2]);
             } else {
                 return bad();
             }
@@ -285,23 +288,23 @@ int main(int argc, char **argv)
             return bad();
         }
     } else if (!strcmp(av[0], "stats")) {
-        jb_kstr(&j, "cmd", "stats");
+        jb_kstr(jp, "cmd", "stats");
         for (int k = 1; k < ac; k++) {
             if (!strcmp(av[k], "--flush"))
-                jb_kbool(&j, "flush", true);
+                jb_kbool(jp, "flush", true);
             else if (!strcmp(av[k], "--reset"))
-                jb_kbool(&j, "reset", true);
+                jb_kbool(jp, "reset", true);
             else if (!strcmp(av[k], "--port") && k + 1 < ac)
-                jb_kstr(&j, "port", av[++k]);
+                jb_kstr(jp, "port", av[++k]);
             else
                 return bad();
         }
     } else {
         return bad();
     }
-    jb_obj_end(&j);
+    jb_obj_end(jp);
 
-    rc = transact(&j, wait_ms);
-    jb_free(&j);
+    rc = transact(jp, wait_ms);
+    jb_free(jp);
     return rc;
 }

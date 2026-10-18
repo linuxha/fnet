@@ -1,0 +1,3 @@
+# systemd-sysusers(8): service account for fnetd
+u fnet - "fnetd service" /srv/fnet
+m fnet dialout

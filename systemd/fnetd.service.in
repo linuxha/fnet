@@ -1,0 +1,41 @@
+[Unit]
+Description=fnetd FLEX disk image and S-Record paper tape server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStartPre=@SBINDIR@/fnetd -t -c @SYSCONFDIR@/fnetd/fnetd.conf
+ExecStart=@SBINDIR@/fnetd -c @SYSCONFDIR@/fnetd/fnetd.conf
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+TimeoutStopSec=5
+
+User=fnet
+Group=fnet
+SupplementaryGroups=dialout
+RuntimeDirectory=fnetd
+RuntimeDirectoryMode=0750
+LogsDirectory=fnetd
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/fnet
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+DevicePolicy=closed
+DeviceAllow=char-ttyS rw
+DeviceAllow=char-ttyUSB rw
+DeviceAllow=char-ttyACM rw
+
+[Install]
+WantedBy=multi-user.target
