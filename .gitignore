@@ -2,3 +2,4 @@ build/
 build-asan/
 *~
 __pycache__/
+.claude/
