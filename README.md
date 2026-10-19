@@ -9,18 +9,19 @@ At the moment (2026/10/17) these programs have not been tested. This is the firs
 
 ## Help
 
-There are three programs:
+There are four programs:
 
 - `fnetd` is the daemon.
 - `fnetctl` changes the running daemon without a restart.
 - `fnetimg` creates and checks FLEX `.DSK` images.
+- `fnetmock` is a mock target (FlexNet client, tape reader/punch) for testing without hardware.
 
 The full details are in [docs/fnetd-guide.md](docs/fnetd-guide.md) (operator guide) and [docs/fnetd-fsd.md](docs/fnetd-fsd.md) (requirements).
 
 ### Build
 
 ```sh
-make            # build/fnetd, build/fnetctl, build/fnetimg
+make            # build/fnetd, build/fnetctl, build/fnetimg, build/fnetmock
 make test       # unit tests + config check
 make itest      # integration tests (needs Python 3)
 ```
@@ -121,6 +122,18 @@ fnetctl stats
 
 - Runtime changes are not saved to the config file.
 - Logs go to the journal (`journalctl -u fnetd`), and per-port counters go to `/run/fnetd/stats.json`.
+
+### Testing without hardware
+
+`fnetmock` plays the target. It dials a `listen` port, accepts an `rfc2217` port (`-L`), or opens a tty or pty:
+
+```sh
+fnetmock -C localhost:7101 -e 'sync; mount 1 GAMES; dir; fetch 1 games.dsk; rexit'
+fnetmock -C localhost:7101 -e 'select 6800:GAME.S19 6800:OUT.S19; load out=game.s19; punch out.s19'
+fnetmock -C localhost:7101          # interactive; type help
+```
+
+See [docs/fnetd-guide.md](docs/fnetd-guide.md#fnetmock) for every command and option.
 
 ### Disk images
 

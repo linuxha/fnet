@@ -26,7 +26,7 @@ LIB      := $(BUILD)/libfnet.a
 FNETD_SRC := $(wildcard src/fnetd/*.c)
 FNETD_OBJ := $(FNETD_SRC:%.c=$(BUILD)/%.o)
 
-BINS     := $(BUILD)/fnetd $(BUILD)/fnetctl $(BUILD)/fnetimg
+BINS     := $(BUILD)/fnetd $(BUILD)/fnetctl $(BUILD)/fnetimg $(BUILD)/fnetmock
 
 UNIT_SRC := $(wildcard tests/unit/test_*.c)
 UNIT_BIN := $(UNIT_SRC:tests/unit/%.c=$(BUILD)/tests/%)
@@ -51,6 +51,11 @@ $(BUILD)/fnetctl: $(BUILD)/src/fnetctl/fnetctl.o $(LIB)
 $(BUILD)/fnetimg: $(BUILD)/src/fnetimg/fnetimg.o $(LIB)
 	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ $^
 
+$(BUILD)/fnetmock: $(BUILD)/src/fnetmock/fnetmock.o $(BUILD)/src/fnetd/telnet.o $(LIB)
+	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ $^
+
+$(BUILD)/src/fnetmock/fnetmock.o: ALL_CFLAGS += -Isrc/fnetd
+
 # Unit tests link the self-contained daemon modules.
 UNIT_FNETD_OBJ := $(BUILD)/src/fnetd/config.o $(BUILD)/src/fnetd/telnet.o
 
@@ -74,7 +79,7 @@ asan:
 install: all
 	install -d $(DESTDIR)$(SBINDIR) $(DESTDIR)$(BINDIR)
 	install -m 0755 $(BUILD)/fnetd $(DESTDIR)$(SBINDIR)/fnetd
-	install -m 0755 $(BUILD)/fnetctl $(BUILD)/fnetimg $(DESTDIR)$(BINDIR)/
+	install -m 0755 $(BUILD)/fnetctl $(BUILD)/fnetimg $(BUILD)/fnetmock $(DESTDIR)$(BINDIR)/
 	install -d $(DESTDIR)$(SYSCONFDIR)/fnetd
 	test -e $(DESTDIR)$(SYSCONFDIR)/fnetd/fnetd.conf || \
 	    install -m 0644 etc/fnetd.conf $(DESTDIR)$(SYSCONFDIR)/fnetd/fnetd.conf

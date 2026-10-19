@@ -18,6 +18,7 @@ BUILD = os.environ.get("FNET_BUILD", os.path.join(ROOT, "build"))
 FNETD = os.path.join(BUILD, "fnetd")
 FNETCTL = os.path.join(BUILD, "fnetctl")
 FNETIMG = os.path.join(BUILD, "fnetimg")
+FNETMOCK = os.path.join(BUILD, "fnetmock")
 
 ACK, NAK, CR, LF, ESC, SP = 0x06, 0x15, 0x0D, 0x0A, 0x1B, 0x20
 DC1, DC2, DC3, DC4 = 0x11, 0x12, 0x13, 0x14
