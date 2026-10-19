@@ -175,7 +175,7 @@ Y is preserved.
 | `nonum` | 577–583 | `LIB ACIA`, then `jsr reset` | See defect D1 |
 | sync | 594–626 | Up to 5 tries of `$55`, then `$AA`; each must echo | Direct port |
 | where | 631–667 | Sends `?`; takes the first char to make `drvltr`; prints it; discards bytes up to ACK | Direct port |
-| `movtbl` | 671–678 | Copies 21 bytes from `$DE00` to the package at `$0000` | `$BE00` on 6800; one pointer plus a temp |
+| `movtbl` | 671–678 | Copies 21 bytes from `$DE00` to the package at `$0000` | `$BE80` on 6800 (`DRVTBL` equate); one pointer plus a temp |
 | `movpkg` | 685–695 | `MEMEND -= drvend`; copies the package down | Must also apply relocations |
 | `movadr` | 699–709 | Patches `$DE01+3n` with `newtbl[n] + MEMEND` | `ADDD` becomes an add with carry |
 | `memend` | 711–713 | `MEMEND -= 1` | — |
@@ -266,8 +266,9 @@ the driver table and the console vectors.
 | `GETFIL` / `OUTDEC` / `OUTHEX` | `$CD2D/39/3C` | `$AD2D/39/3C` | |
 | `GETHEX` / `OUTADR` / `INDEC` | `$CD42/45/48` | `$AD42/45/48` | |
 | `FMSCLS` / `FMS` | `$D403/$D406` | `$B403/$B406` | Not used by FlexNet |
-| `INCHNE` vector | `$D3E5` | *no equivalent* | Use `GETCHR` with the echo flag cleared, as `memdump.asm:65–72` does |
-| Driver jump table | `$DE00` | `$BE00` (**verify**) | READ/WRITE/VERIFY/RESTORE/DRIVE/CHKRDY/QUICK at +0…+18 |
+| `INCHNE` vector | `$D3E5` | *not used* | FCREATE calls `GETCHR` (`$AD15`) with the echo flag (`$AC2F`) cleared, then restores the flag, as `memdump.asm:66–74` does (§12.5) |
+| Driver jump table | `$DE00` | `$BE80` (`t/dskdrv.lst`) | READ/WRITE/VERIFY/RESTORE/DRIVE/CHKRDY/QUICK at +0…+18, then INIT/WARM/SEEK. Make it a `DRVTBL` equate |
+| `PRCNT` (spooler task running) | `$CC34` | `$AC34` | Used by `dskdrv` to suspend the spooler (§9.11) |
 | `$BFEB` (`cdelay`) | system patch | inside the 6800 driver area | See §12 |
 | ACIA | `$E000+16·port` | SWTPC MP-S: `$8000+4·port` | Control = base, data = base+1. Use the **second** 6850. |
 
@@ -284,7 +285,7 @@ shrinks most of this table.)
 | `leax label,pcr` | `ldx #label` (**relocated**) | `:102`, `:202`, … |
 | `lbsr x` / `lbra x` / `lbne x` | `jsr x` / `jmp x` / `beq *+5` + `jmp x` | everywhere |
 | `lda ,x+` / `sta ,x+` | `ldaa 0,x` + `inx` | sector loops, `movtbl`, `movpkg` |
-| `lda -64+3,x` | `stx t`, then subtract 61 from `t` with borrow, then `ldx t` + `ldaa 0,x` | `nread`/`nwrite` |
+| `lda -64+3,x` | Not needed: take the drive from `curdrv`, saved by the DRIVE entry (§12.1) | `nread`/`nwrite` |
 | `leax a,x` / `ldaa b,x` | an add to the low byte with carry into the high byte through a temp | `netdrv` lookup, `search` |
 | `abx` | `stx t` + `addb t+1` + `stab t+1` + `ldab t` + `adcb #0` + `stab t` + `ldx t` | `fmount:115` |
 | `ldd`/`std`/`addd`/`subd`/`cmpd` | A:B pairs: `ldaa hi`+`ldab lo`; `addb lo`+`adca hi`; compare A then B | `memend` math, checksum compare |
@@ -315,7 +316,9 @@ shrinks most of this table.)
    slower than 6800 extended. Retune `odelc` for about 0.5–1 s per character at
    your clock, and drop the floppy (`'@'`) special case: fnetd is never slow.
 5. **Negative index offsets.** `-64+3,x` (FCB drive from the buffer pointer)
-   cannot be encoded. Also check that FLEX 6800's READ really passes X = FCB+64.
+   cannot be encoded. Don't port it. As in `t/dskdrv.lst`, save the drive in the
+   DRIVE/RESTORE/CHKRDY/QUICK entries, which get X = FCB, and use that saved value
+   in READ/WRITE (§12.1).
 6. **Relocation.** Every absolute reference into the package must be fixed after
    the copy. That includes `jmp fread…`, `ldx #netdrv`, all local variables, and
    the three vector `JMP`s. See §11 for the two-origin method.
@@ -329,6 +332,14 @@ shrinks most of this table.)
 10. **Signature scan cost.** Scanning about 40 KB a byte at a time with two memory
     pointers is slow on a 6800. First check `MEMEND+1+21`, where the installer
     normally puts the signature, then fall back to the scan.
+11. **Spooler and interrupts.** FNETDRV doesn't handle the print spooler.
+    `t/dskdrv.lst:135–138` does:
+    - If `PRCNT` (`$AC34`) is non-zero, the call came from the spooler task, so
+      it executes `swi` to yield first.
+    - It holds `sei` for the whole serial transfer and does `cli` on every exit.
+
+    Do the same in `nread`/`nwrite` for remote drives. An IRQ in the middle of
+    a sector loses characters, because the 6850 has only one byte of buffer.
 
 ## 10. Defects in the 6809 sources
 
@@ -415,16 +426,47 @@ isn04   cmpa    0,x             netdrv[d] == d ?
 
 ## 12. Open questions
 
-1. **FLEX 6800 driver table.** Is it at `$BE00` with the same 7-entry order, and
-   does READ/WRITE pass X = FCB+64? Check against the adaptation guide for the
-   target FLEX build.
-2. **`cdelay.asm`.** It stores a decimal argument at `$BFEB`. What does that patch
-   on the 6809 system, and is there an equivalent on the 6800 system? It is not
-   used by any FlexNet program.
-3. **6801/6803.** Should the port target plain 6800 only, or use conditional code
-   for 6801/6803 (D register, `ABX`, `PSHX`)? The FSD lists 6801 as a later goal.
-4. **Interoperability.** Must the 6800 utilities also work with an unmodified 6809
-   driver block layout? If yes, keep §3 byte-for-byte. If not, simplify `netdrv[]`
-   to a 4-bit mask.
-5. **Console input.** Does the target FLEX 6800 provide an unechoed-input routine,
-   or should FCREATE use `GETCHR` with the `$AC2F` echo flag cleared?
+Answers recorded 2026-10-19.
+
+1. **FLEX 6800 driver table.** *Resolved: model it on `t/dskdrv.lst`.* That
+   listing is the FLEX 3.0 serial-disk driver for the SWTPC 6800 (MP-S in slot 2).
+   - **Address.** The jump table is at **`$BE80`**, not `$BE00`. The driver
+     fills `$BE80–$BFF9`. Put the address in a `DRVTBL` equate.
+   - **Order.** It has 10 `JMP`s in the same order as FLEX09: READ `+0`,
+     WRITE `+3`, VERIFY `+6`, RESTORE `+9`, DRIVE `+12`, CHKRDY `+15`,
+     QUICK `+18`, INIT `+21`, WARM `+24`, SEEK `+27`. FNETDRV patches only the
+     first 7, so `movtbl` and `fexit` still move 21 bytes.
+   - **Register contract.**
+     - READ/WRITE: X = buffer, A = track, B = sector.
+     - DRIVE/RESTORE/CHKRDY/QUICK: X = FCB, with the drive at `3,x`.
+     - Return B = status and Z = 1 on success (`clrb`). `dskdrv` returns
+       B = `$08` (CRC error) on any failure.
+   - **Finding the drive.** `dskdrv` never looks in the FCB from READ/WRITE.
+     RESTORE, DRIVE, CHKRDY and QUICK all go to `select`, which saves
+     `3,x & 3` in `reqDrv`, and READ/WRITE use `reqDrv`
+     (`t/dskdrv.lst:178–180`). FLEX 3.0 always selects the drive before it
+     reads or writes. The 6800 FNETDRV does the same:
+     - `ndrsel`, `nrestr`, `ncheck` and `nquick` store `3,x` in `curdrv`
+       before the `netdrv[]` lookup.
+     - `nread`/`nwrite` use `curdrv`.
+     - This removes the `-64+3,x` / `-61` arithmetic (§8, §9.5) and doesn't
+       touch the §3 block.
+   - **Spooler.** Copy the `PRCNT`/`swi` and `sei`/`cli` handling (§9.11).
+   - **Chaining.** The installer copies the table at `DRVTBL`, whatever driver
+     put it there (`dskdrv` or a floppy driver). Local drives then fall through
+     to that driver unchanged.
+2. **`cdelay.asm`.** *Resolved: ignore it.* It is not ported.
+3. **6801/6803.** *Resolved: 6800 only.* Write no conditional code for the 6801.
+4. **Interoperability.** *Resolved: yes.* Keep the §3 driver block layout
+   byte-for-byte. Keep `netdrv[0..3]` as four bytes; do not reduce it to a
+   bit mask.
+5. **Console input.** *Resolved: use `GETCHR` with the echo flag cleared.*
+   FCREATE (`fcreate.asm:261`, `jsr [INCHNE]`) does this for each character,
+   following `memdump.asm:66–74`:
+   1. Save `$AC2F` (the echo flag).
+   2. Clear it.
+   3. `jsr GETCHR` (`$AD15`).
+   4. Put the saved flag back without changing A (`psha`/`pula`).
+
+   Restore the flag on every path out, including ESC and errors, or the
+   console stays unechoed after FCREATE exits.
