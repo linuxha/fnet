@@ -1,12 +1,12 @@
 # fnetd — Operator Guide (v0.0.1)
 
 Requirements live in [fnetd-fsd.md](fnetd-fsd.md). This guide covers building,
-installing, configuring and operating `fnetd`, `fnetctl` and `fnetimg`.
+installing, configuring and operating `fnetd`, `fnetctl`, `fnetimg` and `fnetmock`.
 
 ## Build and test
 
 ```sh
-make            # build/fnetd, build/fnetctl, build/fnetimg
+make            # build/fnetd, build/fnetctl, build/fnetimg, build/fnetmock
 make test       # unit tests + config check of etc/fnetd.conf
 make itest      # integration tests (pty FLEX emulator, mock RFC-2217 server)
 make asan       # ASan/UBSan build in build-asan/ (+ unit tests)
@@ -144,6 +144,54 @@ fnetimg info GAMES.DSK
 fnetimg ls [-a] GAMES.DSK
 fnetimg check GAMES.DSK          # free chain, file chains, cross-links, lost sectors
 ```
+
+## fnetmock
+
+`fnetmock` stands in for the target, so you can exercise fnetd without hardware.
+On TCP it takes the terminal server's side: it answers fnetd's Telnet and
+RFC-2217 negotiation and acknowledges every COM-PORT setting.
+
+| transport                | pairs with fnetd port | notes                                      |
+|--------------------------|-----------------------|--------------------------------------------|
+| `-C, --connect HOST:PORT`| `type = listen`       | `-r` for `telnet = no`                     |
+| `-L, --listen [ADDR:]PORT`| `type = rfc2217`     | waits for fnetd to dial in (`-w MS` limit) |
+| `-T, --tty DEVICE`       | `type = tty`          | null-modem cable, `-b BAUD`                |
+| `--pty[=LINK]`           | `type = tty`          | `device = LINK`; use `-w 1500` so fnetd can open it first |
+
+Commands come from `-e 'cmd; cmd'`, `-s FILE`, the remaining arguments
+(one command), or stdin (an interactive prompt on a tty). `help` lists them.
+A `!` prefix expects the command to fail. The exit code is 0 when every command
+succeeded, 1 when one failed (`-k` keeps going), and 2 for a usage or
+connection error. `-v` shows the negotiation, and `-vv` adds a hex dump of the wire.
+
+```sh
+# FlexNet
+fnetmock -C fnet.lan:7101 -e 'sync; mount 1 GAMES; dir; read 1 0 3; fetch 1 games.dsk; rexit'
+fnetmock -C fnet.lan:7101 -e 'mount 0 SCRATCH; put 0 local.dsk'
+fnetmock -C fnet.lan:7101 -e '!write 0 1 1 fill=$E5 badck'      # server must NAK
+
+# Paper tape: select, load like a monitor, punch like a punch
+fnetmock -C fnet.lan:7101 -e 'select 6800:GAME.S19 6800:OUT.S19; load out=game.s19'
+fnetmock -C fnet.lan:7101 -e 'select 6800:GAME.S19; load pause-every=256 pause-ms=500'
+fnetmock -C fnet.lan:7101 -e 'select "" 6800:OUT.S19; punch out.s19 leader=50 trailer=50 char-us=1000'
+
+# fnetd dials out to us
+fnetmock -L 0.0.0.0:7001 -v
+```
+
+| command | sends | notes |
+|---------|-------|-------|
+| `sync`, `ping`, `pwd`, `cd PATH`, `rexit` | `$55 $AA`, `Q`, `?`, `P`, `E` | |
+| `mount [DRV] NAME`, `drive DRV` | `M` / `m`, `d` | prints `W`/`R` |
+| `dir [PAT] [max=N]`, `dirs [max=N]` | `A`, `I` | `max` sends ESC after N entries |
+| `create [DRV] DIR NAME VOL TRK SEC`, `delete NAME.DSK` | `C` / `c`, `D` | |
+| `read DRV TRK SEC [out=F] [nak\|noack] [quiet]` | `s` | NAKs a bad checksum, like NETDRV |
+| `write DRV TRK SEC FILE\|fill=XX [badck]` | `r` | |
+| `fetch DRV FILE`, `put DRV FILE` | `s`… / `r`… | whole image; handles a short track 0 |
+| `select [LOAD] [PUNCH] [term=cr\|lf\|eot\|nul]` | `\|LOAD\|PUNCH` | `""` keeps a field, `-` clears it |
+| `load [out=F\|-] [idle=MS] [eof=record\|idle] [pause-every=N pause-ms=MS] [stop-after=N]` | DC1 (DC3) | checks each S-record, reports cps and bytes after DC3 |
+| `punch FILE\|- [eol=crlf\|cr\|lf] [leader=N] [trailer=N] [char-us=N] [line-ms=N] [nodc4]` | DC2 … DC4 | `nodc4` tests `punch_timeout` |
+| `dc1`…`dc4`, `send TOKEN…`, `recv [MS]`, `sleep MS`, `status` | | `send '$55' 'text\r'` |
 
 ## Test coverage
 
