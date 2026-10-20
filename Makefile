@@ -31,7 +31,13 @@ BINS     := $(BUILD)/fnetd $(BUILD)/fnetctl $(BUILD)/fnetimg $(BUILD)/fnetmock
 UNIT_SRC := $(wildcard tests/unit/test_*.c)
 UNIT_BIN := $(UNIT_SRC:tests/unit/%.c=$(BUILD)/tests/%)
 
-.PHONY: all clean test itest check asan install
+# The FLEX 6800 client (src/6800) needs the Macro Assembler AS.
+# Without it, its integration tests skip.
+ASL      ?= asl
+P2HEX    ?= p2hex
+HAVE_ASL := $(shell command -v $(ASL) >/dev/null && command -v $(P2HEX) >/dev/null && echo yes)
+
+.PHONY: all clean test itest check asan install client6800
 
 all: $(BINS)
 
@@ -67,7 +73,14 @@ test: $(UNIT_BIN) $(BUILD)/fnetd
 	@set -e; for t in $(UNIT_BIN); do echo "== $$t"; $$t; done
 	$(BUILD)/fnetd -t -c etc/fnetd.conf
 
-itest: all
+client6800:
+ifeq ($(HAVE_ASL),yes)
+	$(MAKE) -C src/6800 BUILD=$(abspath $(BUILD))/6800 ASL=$(ASL) P2HEX=$(P2HEX)
+else
+	@echo "$(ASL)/$(P2HEX) not found: not building the FLEX 6800 client, its tests will skip"
+endif
+
+itest: all client6800
 	python3 -m unittest discover -s tests/itest -p 'test_*.py' -v
 
 check: test itest
