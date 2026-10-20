@@ -9,6 +9,8 @@
 ;
 LINBUF	equ  $A080	;* line buffer
 UTLORG	equ  $A100	;* utility command space (ORG of every utility)
+UTLEND	equ  $A700	;* end of the utility command space (exclusive)
+SYSFCB	equ  $A840	;* system FCB, 320 bytes of scratch once loaded
 SCNEND	equ  $A000	;* upper bound of the signature scan
 TTYEOL	equ  $AC02	;* end-of-line character
 LSTTRM	equ  $AC11	;* last terminator

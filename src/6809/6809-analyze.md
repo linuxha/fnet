@@ -193,9 +193,11 @@ Y is preserved.
 4. *(FDRIVE)* Set `drvptr = sgnst+30`, which is `drvltr`.
 5. *(RESYNC)* Also set `reset+1 = sgnst+14`.
 
-**Port as one shared include** (`netfind.inc`). It finds the signature, fills
-the three stubs and `ndarray`/`drvptr`, and sets C=1 when found. That removes
-about 30 duplicated lines from each of 10 programs.
+**Port as one shared include.** In the port this is `src/6800/fnutil.inc`. Its
+`netfind` finds the signature, fills the three stubs and `ndarray`/`drvptr`, and
+sets C=1 when found. That removes about 30 duplicated lines from each of 10
+programs. The include also holds the command line helpers (`argcnt`, `sndarg`)
+and `pdata`. RDIR and RLIST share their pager through `fnlist.inc`.
 
 ### 5.2 Command-line handling idioms
 - `TTYLBP`/`NXTCH` give raw access to the line buffer.
@@ -366,7 +368,7 @@ Fix these while porting rather than carrying them across.
 1. **Includes first.**
    - `flex68.inc`: the §7 values.
    - `acia68.inc`: equates only, for the second 6850.
-   - `netfind.inc`: the §5.1 prologue as a subroutine.
+   - `fnutil.inc`: the §5.1 prologue as a subroutine (`netfind`).
 2. **Pick a relocation strategy for the driver:**
    - **(a) Fixed origin (fastest bring-up).** Assemble the package at a set address
      below the top of RAM (for example `ORG $9C00`). The installer only checks

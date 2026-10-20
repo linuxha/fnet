@@ -7,11 +7,16 @@ PYTHON   ?= python3
 BUILD    ?= ../../build/6800
 
 ASFLAGS  := -cpu 6800 -q
-INC      := flex68.inc acia68.inc
+INC      := flex68.inc acia68.inc fnutil.inc fnlist.inc
+
+# Utilities: foo.asm builds FOO.CMD
+UTILS    := fcreate fdrive fexit fmount memdump rcd rdelete rdir resync rlist
+upper     = $(shell echo $(1) | tr a-z A-Z)
+CMDS     := $(BUILD)/FNETDRV.CMD $(foreach u,$(UTILS),$(BUILD)/$(call upper,$(u)).CMD)
 
 .PHONY: all check clean
 
-all: $(BUILD)/FNETDRV.CMD
+all: $(CMDS)
 
 $(BUILD)/%.p: %.asm $(INC)
 	@mkdir -p $(BUILD)
@@ -23,6 +28,12 @@ $(BUILD)/%.s19: $(BUILD)/%.p
 $(BUILD)/FNETDRV.CMD: $(BUILD)/fnetdrv.s19
 	$(PYTHON) s19cmd.py $< $@
 
+define cmd_rule
+$(BUILD)/$(call upper,$(1)).CMD: $(BUILD)/$(1).s19
+	$$(PYTHON) s19cmd.py $$< $$@
+endef
+$(foreach u,$(UTILS),$(eval $(call cmd_rule,$(u))))
+
 # Package assembled $100 higher, for the relocation check
 $(BUILD)/fnetdrv-hi.p: fnetdrv.asm $(INC)
 	@mkdir -p $(BUILD)
@@ -32,4 +43,4 @@ check: $(BUILD)/fnetdrv.s19 $(BUILD)/fnetdrv-hi.s19
 	$(PYTHON) relocchk.py $(BUILD)/fnetdrv.s19 $(BUILD)/fnetdrv.lst $(BUILD)/fnetdrv-hi.s19
 
 clean:
-	rm -f $(BUILD)/fnetdrv* $(BUILD)/FNETDRV.CMD
+	rm -f $(CMDS) $(foreach f,fnetdrv fnetdrv-hi $(UTILS),$(BUILD)/$(f).p $(BUILD)/$(f).s19 $(BUILD)/$(f).lst)
